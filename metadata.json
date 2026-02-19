@@ -1,0 +1,5 @@
+{
+  "name": "bookObiMaker",
+  "description": "日本の書籍の「帯」をデザインできるアプリ。NDL検索で書影を取得し、オリジナルの帯を作成・保存できます。",
+  "requestFramePermissions": []
+}
