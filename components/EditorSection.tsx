@@ -374,7 +374,8 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
 
   const handleShareX = async () => {
     const amazonUrl = getAmazonUrl(book.isbn);
-      const text = `「${book.title}」の帯を作ってみました！\n\n ${amazonUrl}  \n\n#bookObiMaker`;
+    const appUrl = window.location.href;
+      const text = `「${book.title}」の帯を作ってみました！ \n\n ${appUrl} \n\n ${amazonUrl}  \n\n#bookObiMaker`;
       
       try {
         // Try Web Share API (Mobile Support for Images)
