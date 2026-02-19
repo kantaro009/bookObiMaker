@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans JP", sans-serif;
+  --font-serif: "Shippori Mincho", serif;
+  
+  --color-brand-50: #fdf8f6;
+  --color-brand-100: #f2e8e5;
+  --color-brand-200: #eaddd7;
+  --color-brand-300: #e0cec7;
+  --color-brand-400: #d2bab0;
+  --color-brand-500: #a18072;
+  --color-brand-600: #8a6a5d;
+  --color-brand-700: #72554a;
+  --color-brand-800: #5c4238;
+  --color-brand-900: #4a362e;
+}
+
+body {
+  background-color: #fdf8f6;
+  color: #4a362e;
+}
