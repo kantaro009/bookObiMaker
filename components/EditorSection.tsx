@@ -374,7 +374,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
 
   const handleShareX = async () => {
     const amazonUrl = getAmazonUrl(book.isbn);
-    const appUrl = window.location.href;
+    const appUrl = "https://kantaro009.github.io/bookObiMaker/";
       const text = `「${book.title}」の帯を作ってみました！ \n\n ${appUrl} \n\n ${amazonUrl}  \n\n#bookObiMaker`;
       
       try {
