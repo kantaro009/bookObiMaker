@@ -74,6 +74,13 @@
 - `services/ndlService.ts` の検索結果にISBNがあればopenBDを優先、なければNDLサムネイル
 - openBD APIエンドポイント: `https://api.openbd.jp/v1/get?isbn={ISBN}`
 - 書影URLは `summary.cover` フィールドから取得（CORS確認が必要）
+- **NDL書影API仕様**:
+  - URL: `https://ndlsearch.ndl.go.jp/thumbnail/[ISBN又はJP-eコード].jpg`
+  - 末尾に `.jpg` を指定（必須）
+  - ISBN: 13桁ハイフン区切りなし / JP-eコード: 20桁区切りなし
+  - JP-eコード優先で書影取得（電子書籍資料との親和性が高い）
+  - 書影なし時は HTTP 404返戻
+  - キャッシュ定期更新推奨
 
 ### 海外作品対応（Open Library）
 - `services/openLibraryService.ts` を新規追加してSearch/Coversを分離

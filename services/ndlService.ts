@@ -60,31 +60,41 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       const title = item.querySelector('title')?.textContent || '';
       const author = item.querySelector('author')?.textContent || '';
       
-      // ISBN抽出
+      // ISBN / JP-eコード抽出
       const identifiers = Array.from(item.getElementsByTagName('dc:identifier'));
       let isbn = '';
+      let jpCode = ''; // JP-eコード（20桁）
       
       for (const id of identifiers) {
         const text = id.textContent?.replace(/-/g, '') || '';
-        // Basic check for ISBN-13 or ISBN-10
-        if (text.length === 13 && (text.startsWith('978') || text.startsWith('979'))) {
-          isbn = text;
-          break;
+        
+        // JP-eコード（20桁）を優先
+        if (text.length === 20 && !jpCode) {
+          jpCode = text;
+          continue;
         }
-        if (text.length === 10) {
+        
+        // ISBN-13（13桁、978/979で始まる）
+        if (text.length === 13 && (text.startsWith('978') || text.startsWith('979')) && !isbn) {
           isbn = text;
-          break;
+        }
+        
+        // ISBN-10（10桁）
+        if (text.length === 10 && !isbn) {
+          isbn = text;
         }
       }
 
       if (title) {
-        // NDLの結果を一時保存（openBDで補完する前のバックアップ）
-        const rawImageUrl = isbn ? `https://ndlsearch.ndl.go.jp/thumbnail/${isbn}.jpg` : undefined;
+        // 書影URL生成: JP-eコード優先、次にISBN
+        // JP-eコードを持つ資料は電子書籍の可能性があり、書影が異なる場合がある
+        const imageIdentifier = jpCode || isbn;
+        const rawImageUrl = imageIdentifier ? `https://ndlsearch.ndl.go.jp/thumbnail/${imageIdentifier}.jpg` : undefined;
         
         ndlBooks.push({
           title,
           author,
-          isbn,
+          isbn: isbn || jpCode, // ISBNがなければJP-eコードをisbnフィールドに入れる（互換性のため）
           imageUrl: rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined,
           source: 'ndl',
         });
