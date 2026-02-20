@@ -42,7 +42,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSelectBook }) =>
         </h2>
         <p className="text-brand-600 mb-6">
           タイトルや著者名を入力してください。<br/>
-          国会図書館サーチから書影を取得します。
+          国内作品は国会図書館・openBD、海外作品はOpen Libraryから書影を取得します。
         </p>
         
         <form onSubmit={handleSearch} className="relative w-full">

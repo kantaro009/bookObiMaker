@@ -14,7 +14,7 @@ export const Header: React.FC = () => {
         </div>
       </div>
       <div className="hidden sm:block text-sm text-brand-400">
-        Powered by NDL API
+        Powered by NDL, openBD & Open Library
       </div>
     </header>
   );

@@ -5,6 +5,7 @@ export interface Book {
   isbn: string;
   imageUrl?: string;
   publisher?: string;
+  source?: 'ndl' | 'openbd' | 'openlibrary'; // データソース識別用
 }
 
 export interface TextConfig {

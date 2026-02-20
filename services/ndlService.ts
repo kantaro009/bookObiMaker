@@ -1,4 +1,6 @@
 import { Book } from '../types';
+import { fetchBooksFromOpenBD } from './openBdService';
+import { searchBooksFromOpenLibrary } from './openLibraryService';
 
 const NDL_API_ENDPOINT = 'https://ndlsearch.ndl.go.jp/api/opensearch';
 
@@ -39,8 +41,6 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
   if (!query) return [];
 
   // Construct URL for NDL OpenSearch (RSS format)
-  // Note: Using a proxy service might be required in production for CORS, 
-  // but for this demo we attempt direct access and fallback gracefully.
   const url = `${NDL_API_ENDPOINT}?title=${encodeURIComponent(query)}&cnt=12&dplot=RSS`;
 
   try {
@@ -53,14 +53,14 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
     const xmlDoc = parser.parseFromString(xmlText, "text/xml");
     
     const items = xmlDoc.querySelectorAll('item');
-    const books: Book[] = [];
+    const ndlBooks: Book[] = [];
+    const isbns: string[] = [];
 
     items.forEach((item) => {
       const title = item.querySelector('title')?.textContent || '';
       const author = item.querySelector('author')?.textContent || '';
-      // NDL often returns ISBN in <dc:identifier xsi:type="dc:ISBN"> or similar.
-      // In RSS, it's often in identifiers. 
-      // Simplified parsing logic for demo:
+      
+      // ISBN抽出
       const identifiers = Array.from(item.getElementsByTagName('dc:identifier'));
       let isbn = '';
       
@@ -78,27 +78,84 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       }
 
       if (title) {
-        // Use the proxy wrapper for the image URL
+        // NDLの結果を一時保存（openBDで補完する前のバックアップ）
         const rawImageUrl = isbn ? `https://ndlsearch.ndl.go.jp/thumbnail/${isbn}.jpg` : undefined;
         
-        books.push({
+        ndlBooks.push({
           title,
           author,
           isbn,
-          imageUrl: rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined
+          imageUrl: rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined,
+          source: 'ndl',
         });
+
+        // ISBNがあればopenBD用に保存
+        if (isbn) {
+          isbns.push(isbn);
+        }
       }
     });
 
-    if (books.length === 0) {
-       console.warn("No books found or parsing failed, returning empty.");
+    // NDLで結果が見つかった場合、openBDで詳細を取得
+    if (isbns.length > 0) {
+      try {
+        const openBdBooks = await fetchBooksFromOpenBD(isbns);
+        
+        // openBDの結果をISBNでマッピング
+        const openBdMap = new Map<string, Book>();
+        openBdBooks.forEach(book => {
+          if (book.isbn) {
+            openBdMap.set(book.isbn, { ...book, source: 'openbd' });
+          }
+        });
+
+        // NDLの結果をopenBDで補完
+        const enhancedBooks = ndlBooks.map(ndlBook => {
+          if (ndlBook.isbn && openBdMap.has(ndlBook.isbn)) {
+            const openBdBook = openBdMap.get(ndlBook.isbn)!;
+            // openBDの書影があればそれを優先、なければNDLの書影を使用
+            return {
+              ...ndlBook,
+              imageUrl: openBdBook.imageUrl || ndlBook.imageUrl,
+              publisher: openBdBook.publisher || ndlBook.publisher,
+              source: openBdBook.imageUrl ? 'openbd' : 'ndl',
+            } as Book;
+          }
+          return ndlBook;
+        });
+
+        return enhancedBooks;
+      } catch (openBdError) {
+        console.warn('openBD fetch failed, using NDL data:', openBdError);
+        return ndlBooks;
+      }
     }
-    
-    return books;
+
+    // NDLで結果がない場合、Open Libraryを試す（海外作品向け）
+    if (ndlBooks.length === 0) {
+      console.log('No results from NDL, trying Open Library...');
+      try {
+        const openLibraryBooks = await searchBooksFromOpenLibrary(query, 12);
+        return openLibraryBooks.map(book => ({ ...book, source: 'openlibrary' as const }));
+      } catch (olError) {
+        console.error('Open Library search failed:', olError);
+        return [];
+      }
+    }
+
+    return ndlBooks;
 
   } catch (error) {
-    console.error("Failed to fetch from NDL (likely CORS or network error). Using demo data.", error);
-    // Filter demo books by query for a fake search experience
-    return DEMO_BOOKS.filter(b => b.title.includes(query) || b.author.includes(query));
+    console.error("Failed to fetch from NDL. Trying Open Library as fallback.", error);
+    
+    // NDL失敗時はOpen Libraryにフォールバック
+    try {
+      const openLibraryBooks = await searchBooksFromOpenLibrary(query, 12);
+      return openLibraryBooks.map(book => ({ ...book, source: 'openlibrary' as const }));
+    } catch (olError) {
+      console.error("Open Library also failed. Using demo data.", olError);
+      // Filter demo books by query for a fake search experience
+      return DEMO_BOOKS.filter(b => b.title.includes(query) || b.author.includes(query));
+    }
   }
 };
