@@ -2,7 +2,7 @@
 export interface Book {
   title: string;
   author: string;
-  isbn: string;
+  isbn?: string;
   imageUrl?: string;
   publisher?: string;
   source?: 'ndl' | 'openbd' | 'openlibrary'; // データソース識別用

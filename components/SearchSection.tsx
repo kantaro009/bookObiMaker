@@ -82,7 +82,7 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSelectBook }) =>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {results.map((book, index) => (
             <button
-              key={`${book.isbn}-${index}`}
+              key={`${book.isbn || book.title}-${index}`}
               onClick={() => onSelectBook(book)}
               className="flex flex-col items-start text-left bg-white rounded-lg shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 p-3 border border-brand-100 group"
             >
@@ -99,6 +99,11 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSelectBook }) =>
                 ) : (
                   <BookIcon size={40} className="text-brand-300" />
                 )}
+                {book.source && (
+                  <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-brand-900/60 text-white text-[8px] rounded uppercase backdrop-blur-sm">
+                    {book.source === 'openlibrary' ? 'International' : book.source}
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-brand-900/0 group-hover:bg-brand-900/10 transition-colors" />
               </div>
               <h3 className="font-bold text-brand-900 line-clamp-2 text-sm mb-1">
@@ -107,6 +112,11 @@ export const SearchSection: React.FC<SearchSectionProps> = ({ onSelectBook }) =>
               <p className="text-xs text-brand-500 line-clamp-1">
                 {book.author}
               </p>
+              {book.isbn && (
+                <p className="text-[10px] text-brand-400 mt-1">
+                  ISBN: {book.isbn}
+                </p>
+              )}
               {book.publisher && (
                 <p className="text-[10px] text-brand-400 mt-1">
                   {book.publisher}

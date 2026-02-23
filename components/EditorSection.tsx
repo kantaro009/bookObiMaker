@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Download, Type, Palette, Layout, Settings2, Sparkles, BoxSelect, ShoppingCart, Share2 } from 'lucide-react';
 import { Button } from './Button';
 import { Book, ObiStyle, ObiContent, TextConfig } from '../types';
+import { toIsbn10 } from '../utils/isbnUtils';
 
 interface EditorSectionProps {
   book: Book;
@@ -34,34 +35,6 @@ const PALETTES = [
   { bg: '#8FBC8F', text: '#1A1A1A', name: '自然グリーン' },
   { bg: '#F5F5F5', text: '#333333', name: 'クラフト紙風' },
 ];
-
-// Helper to convert ISBN13 to ISBN10 for Amazon URL
-// Reference: https://qiita.com/evesquare/items/fd3bcb257b7cdea926a9
-const toIsbn10 = (isbn13: string): string | null => {
-  if (!isbn13) return null;
-  const cleanIsbn = isbn13.replace(/-/g, '');
-  
-  if (cleanIsbn.length !== 13 || !cleanIsbn.startsWith('978')) {
-     // If it's already 10 digits, just return it
-     if (cleanIsbn.length === 10) return cleanIsbn;
-     return null;
-  }
-  
-  const core = cleanIsbn.slice(3, 12); // 9 digits
-  let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += parseInt(core[i]) * (10 - i);
-  }
-  
-  const remainder = sum % 11;
-  const checkDigitVal = 11 - remainder;
-  
-  let checkDigit = checkDigitVal.toString();
-  if (checkDigitVal === 10) checkDigit = 'X';
-  if (checkDigitVal === 11) checkDigit = '0';
-  
-  return core + checkDigit;
-};
 
 // Generate a subtle noise pattern for paper texture
 const createPaperPattern = (ctx: CanvasRenderingContext2D) => {
@@ -181,19 +154,44 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasUrl, setCanvasUrl] = useState<string | null>(null);
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
+  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
+  const [uploadName, setUploadName] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (!book.imageUrl) return;
+    setUploadUrl(null);
+    setUploadName(null);
+    setLoadError(false);
+  }, [book.isbn, book.title]);
+
+  useEffect(() => {
+    const sourceUrl = uploadUrl || book.imageUrl;
+    if (!sourceUrl) {
+      setImgElement(null);
+      setLoadError(true);
+      return;
+    }
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = book.imageUrl;
-    img.onload = () => setImgElement(img);
-    img.onerror = () => {
-        const retryImg = new Image();
-        retryImg.src = book.imageUrl!;
-        retryImg.onload = () => setImgElement(retryImg);
+    img.src = sourceUrl;
+    img.onload = () => {
+      setLoadError(false);
+      setImgElement(img);
     };
-  }, [book.imageUrl]);
+    img.onerror = () => {
+      setImgElement(null);
+      setLoadError(true);
+    };
+  }, [book.imageUrl, uploadUrl]);
+
+  const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setUploadUrl(url);
+    setUploadName(file.name);
+    setLoadError(false);
+  };
 
   // Helper to draw rotated multiline text
   const drawText = (
@@ -355,7 +353,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
   const handleDownload = () => {
     if (canvasUrl) {
       const link = document.createElement('a');
-      link.download = `book-obi-${book.isbn}.png`;
+      link.download = book.isbn ? `book-obi-${book.isbn}.png` : 'book-obi.png';
       link.href = canvasUrl;
       link.click();
     } else {
@@ -402,7 +400,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
       alert("PCなどのブラウザからは画像を直接シェアできません。\n「保存」した画像を、開いた投稿画面に貼り付けてください。");
   };
 
-  const amazonUrl = getAmazonUrl(book.isbn);
+  const amazonUrl = book.isbn ? getAmazonUrl(book.isbn) : null;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4 flex flex-col lg:flex-row gap-8">
@@ -414,7 +412,37 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
             className="max-w-full h-auto shadow-2xl rounded-sm"
             style={{ maxHeight: '75vh' }}
           />
-          {!imgElement && <div className="text-brand-400 animate-pulse">読み込み中...</div>}
+          {!imgElement && !loadError && (book.imageUrl || uploadUrl) && (
+            <div className="text-brand-400 animate-pulse">読み込み中...</div>
+          )}
+          {!imgElement && loadError && (
+            <div className="text-brand-400">書影がありません</div>
+          )}
+        </div>
+
+        {!imgElement && (
+          <div className="w-full max-w-md bg-white rounded-lg border border-brand-100 p-3 text-xs text-brand-600 mb-3">
+            <p className="font-bold text-brand-800 text-sm mb-1">画像アップロード</p>
+            <p className="mb-2">書影が取得できない場合は画像をアップロードできます。</p>
+            <label className="inline-flex items-center gap-2 px-3 py-2 bg-brand-600 text-white text-xs font-bold rounded-md cursor-pointer hover:bg-brand-700 transition-colors">
+              ファイルを選択
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadImage}
+                className="hidden"
+              />
+            </label>
+            <p className="mt-2 text-[10px] text-brand-500">
+              {uploadName ? `選択中: ${uploadName}` : '未選択'}
+            </p>
+          </div>
+        )}
+
+        <div className="w-full max-w-md bg-white rounded-lg border border-brand-100 p-3 text-xs text-brand-600 mb-3">
+          <p className="font-bold text-brand-800 text-sm mb-1">{book.title}</p>
+          <p className="mb-1">{book.author}</p>
+          {book.isbn && <p>ISBN: {book.isbn}</p>}
         </div>
         
         <div className="flex flex-col gap-3 w-full max-w-md">

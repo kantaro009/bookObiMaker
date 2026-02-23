@@ -1,4 +1,6 @@
 import { Book } from '../types';
+import { getCorsFriendlyUrl } from './imageUtils';
+import { normalizeIsbn } from '../utils/isbnUtils';
 
 const OPENBD_API_ENDPOINT = 'https://api.openbd.jp/v1';
 
@@ -68,10 +70,11 @@ export const fetchBooksFromOpenBD = async (isbns: string[]): Promise<Book[]> => 
       }
 
       // ISBN取得
-      const isbn = summary?.isbn || isbns[index] || '';
+      const isbn = normalizeIsbn(summary?.isbn || isbns[index] || '');
 
       // 書影URL取得（summary.cover）
-      const imageUrl = summary?.cover || undefined;
+      const rawImageUrl = summary?.cover || undefined;
+      const imageUrl = rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined;
 
       // 出版社取得
       const publisher = summary?.publisher || undefined;
