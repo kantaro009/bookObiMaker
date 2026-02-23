@@ -21,7 +21,7 @@ export const pickPreferredIsbn = (isbns?: string[]): string | undefined => {
   if (isbn13) return isbn13;
 
   const isbn10 = normalized.find((value) => isIsbn10(value));
-  return isbn10 || undefined;
+  return isbn10;
 };
 
 // Convert ISBN-13 (978 prefix) to ISBN-10 for Amazon URL

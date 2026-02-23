@@ -39,3 +39,13 @@
 - services/ndlService.ts
 - components/SearchSection.tsx
 - components/EditorSection.tsx
+- utils/isbnUtils.ts (新規)
+- utils/textMatchUtils.ts (新規)
+
+## 動作確認観点
+- 検索結果のISBN表示が正しいか（例: 青天 → 9784163920665）
+- 検索結果の書影が取得できるか（NDL/openBD/Open Library）
+- 検索結果を選択後、編集画面のISBNが一致するか
+- Amazonリンクが正しいISBN-10に変換されるか
+- No Image時のアップロードが動作するか（選択名表示、プレビュー反映）
+- ISBN未取得の本でも保存できるか（ファイル名 book-obi.png）

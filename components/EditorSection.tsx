@@ -165,6 +165,14 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
   }, [book.isbn, book.title]);
 
   useEffect(() => {
+    return () => {
+      if (uploadUrl) {
+        URL.revokeObjectURL(uploadUrl);
+      }
+    };
+  }, [uploadUrl]);
+
+  useEffect(() => {
     const sourceUrl = uploadUrl || book.imageUrl;
     if (!sourceUrl) {
       setImgElement(null);

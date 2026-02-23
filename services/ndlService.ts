@@ -3,6 +3,7 @@ import { fetchBooksFromOpenBD } from './openBdService';
 import { searchBooksFromOpenLibrary, getCoverUrlByISBN, findIsbnByTitleAuthor } from './openLibraryService';
 import { getCorsFriendlyUrl } from './imageUtils';
 import { normalizeIsbn, isIsbn10, isIsbn13, pickPreferredIsbn } from '../utils/isbnUtils';
+import { normalizeForMatch } from '../utils/textMatchUtils';
 
 const NDL_API_ENDPOINT = 'https://ndlsearch.ndl.go.jp/api/opensearch';
 
@@ -118,11 +119,12 @@ async function fetchFromNDL(query: string): Promise<Book[]> {
     if (title) {
       const imageIdentifier = jpCode || isbn;
       const rawImageUrl = imageIdentifier ? `https://ndlsearch.ndl.go.jp/thumbnail/${imageIdentifier}.jpg` : undefined;
+      const finalIsbn = isbn || jpCode;
       
       ndlBooks.push({
         title,
         author,
-        isbn: isbn || jpCode || undefined,
+        isbn: finalIsbn || undefined,
         imageUrl: rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined,
         source: 'ndl',
       });
@@ -178,13 +180,6 @@ async function fetchFromNDL(query: string): Promise<Book[]> {
 
 export const searchBooks = async (query: string): Promise<Book[]> => {
   if (!query) return [];
-
-  const normalizeForMatch = (value: string): string => {
-    return value
-      .toLowerCase()
-      .replace(/[\s\u3000]/g, '')
-      .replace(/["'“”‘’()（）\[\]【】:：\-–—・]/g, '');
-  };
 
   // NDLとOpen Libraryを並行して検索し、取得率を最大化する
   const [ndlResults, olResults] = await Promise.allSettled([

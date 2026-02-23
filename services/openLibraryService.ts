@@ -1,6 +1,7 @@
 import { Book } from '../types';
 import { getCorsFriendlyUrl } from './imageUtils';
 import { pickPreferredIsbn } from '../utils/isbnUtils';
+import { normalizeForMatch } from '../utils/textMatchUtils';
 
 const OPENLIBRARY_SEARCH_ENDPOINT = 'https://openlibrary.org/search.json';
 const OPENLIBRARY_COVERS_ENDPOINT = 'https://covers.openlibrary.org/b';
@@ -77,13 +78,6 @@ export const searchBooksFromOpenLibrary = async (
     console.error('Failed to fetch from Open Library:', error);
     return [];
   }
-};
-
-const normalizeForMatch = (value: string): string => {
-  return value
-    .toLowerCase()
-    .replace(/[\s\u3000]/g, '')
-    .replace(/["'“”‘’()（）\[\]【】:：\-–—・]/g, '');
 };
 
 /**
