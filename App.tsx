@@ -3,9 +3,33 @@ import { Header } from './components/Header';
 import { SearchSection } from './components/SearchSection';
 import { EditorSection } from './components/EditorSection';
 import { Book } from './types';
+import { searchBooks } from './services/ndlService';
 
 function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Book[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
+
+    setIsLoading(true);
+    setHasSearched(true);
+    setError(null);
+    setResults([]);
+
+    try {
+      const books = await searchBooks(searchQuery);
+      setResults(books);
+    } catch (err) {
+      setError("検索中にエラーが発生しました。");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSelectBook = (book: Book) => {
     setSelectedBook(book);
@@ -14,6 +38,7 @@ function App() {
 
   const handleBack = () => {
     setSelectedBook(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -23,7 +48,16 @@ function App() {
       <main className="flex-1 flex flex-col py-8 px-4">
         {!selectedBook ? (
           <div className="animate-in fade-in zoom-in duration-300">
-            <SearchSection onSelectBook={handleSelectBook} />
+            <SearchSection 
+              query={query}
+              setQuery={setQuery}
+              results={results}
+              isLoading={isLoading}
+              hasSearched={hasSearched}
+              error={error}
+              onSearch={handleSearch}
+              onSelectBook={handleSelectBook}
+            />
           </div>
         ) : (
           <div className="animate-in slide-in-from-right duration-300">

@@ -1,37 +1,32 @@
-import React, { useState, FormEvent } from 'react';
+import React, { FormEvent } from 'react';
 import { Search, Book as BookIcon } from 'lucide-react';
 import { Button } from './Button';
 import { Book } from '../types';
-import { searchBooks } from '../services/ndlService';
 
 interface SearchSectionProps {
+  query: string;
+  setQuery: (query: string) => void;
+  results: Book[];
+  isLoading: boolean;
+  hasSearched: boolean;
+  error: string | null;
+  onSearch: (query: string) => void;
   onSelectBook: (book: Book) => void;
 }
 
-export const SearchSection: React.FC<SearchSectionProps> = ({ onSelectBook }) => {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Book[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+export const SearchSection: React.FC<SearchSectionProps> = ({ 
+  query,
+  setQuery,
+  results,
+  isLoading,
+  hasSearched,
+  error,
+  onSearch,
+  onSelectBook 
+}) => {
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
-
-    setIsLoading(true);
-    setHasSearched(true);
-    setError(null);
-    setResults([]);
-
-    try {
-      const books = await searchBooks(query);
-      setResults(books);
-    } catch (err) {
-      setError("検索中にエラーが発生しました。");
-    } finally {
-      setIsLoading(false);
-    }
+    onSearch(query);
   };
 
   return (
