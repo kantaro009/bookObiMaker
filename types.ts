@@ -4,8 +4,9 @@ export interface Book {
   author: string;
   isbn?: string;
   imageUrl?: string;
+  coverCandidates?: string[];
   publisher?: string;
-  source?: 'ndl' | 'openbd' | 'openlibrary'; // データソース識別用
+  source?: 'ndl' | 'openbd' | 'openlibrary' | 'googlebooks'; // データソース識別用
 }
 
 export interface TextConfig {

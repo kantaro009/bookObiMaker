@@ -14,7 +14,7 @@
 - 🎨 **帯デザイン生成**: 書籍情報から自動的に帯のデザインを生成
 - 🖼️ **書籍カバー取得**: 複数のAPIから書籍カバー画像を自動取得
 - 💾 **画像ダウンロード**: 生成した帯画像をダウンロード可能
-- 🔄 **複数API対応**: NDL、openBD、Open Libraryの3つのAPIから最適な情報を取得
+- 🔄 **複数API対応**: NDL、openBD、Open Library、Google BooksのAPIから最適な情報を取得
 
 ## 🛠️ 技術スタック
 
@@ -37,6 +37,7 @@ bookobimaker/
 │   ├── ndlService.ts   # 国立国会図書館API
 │   ├── openBdService.ts    # openBD API
 │   ├── openLibraryService.ts   # Open Library API
+│   ├── googleBooksService.ts   # Google Books API
 │   └── imageUtils.ts   # 画像処理ユーティリティ
 ├── utils/              # ユーティリティ関数
 │   ├── isbnUtils.ts    # ISBN処理
@@ -98,6 +99,7 @@ npm run deploy
 - **国立国会図書館サーチAPI**: 日本の書籍情報検索
 - **openBD**: 日本の書籍情報・カバー画像取得
 - **Open Library API**: 国際的な書籍情報・カバー画像取得
+- **Google Books API**: ISBNベースの補助的な書影取得
 
 ## 📝 ライセンス
 

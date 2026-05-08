@@ -1,6 +1,6 @@
 import { Book } from '../types';
-import { getCorsFriendlyUrl } from './imageUtils';
-import { normalizeIsbn } from '../utils/isbnUtils';
+import { dedupeUrls, getCorsFriendlyUrl } from './imageUtils';
+import { isIsbn10, normalizeIsbn, toIsbn13 } from '../utils/isbnUtils';
 
 const OPENBD_API_ENDPOINT = 'https://api.openbd.jp/v1';
 
@@ -38,8 +38,19 @@ interface OpenBDBook {
 export const fetchBooksFromOpenBD = async (isbns: string[]): Promise<Book[]> => {
   if (!isbns || isbns.length === 0) return [];
 
+  const requestIsbns = Array.from(new Set(
+    isbns
+      .map((isbn) => normalizeIsbn(isbn))
+      .filter(Boolean)
+      .map((isbn) => {
+        if (!isIsbn10(isbn)) return isbn;
+        return toIsbn13(isbn) || isbn;
+      })
+  ));
+  if (requestIsbns.length === 0) return [];
+
   // ISBNをカンマ区切りで連結（最大1000件）
-  const isbnQuery = isbns.slice(0, 1000).join(',');
+  const isbnQuery = requestIsbns.slice(0, 1000).join(',');
   const url = `${OPENBD_API_ENDPOINT}/get?isbn=${isbnQuery}`;
 
   try {
@@ -70,11 +81,12 @@ export const fetchBooksFromOpenBD = async (isbns: string[]): Promise<Book[]> => 
       }
 
       // ISBN取得
-      const isbn = normalizeIsbn(summary?.isbn || isbns[index] || '');
+      const isbn = normalizeIsbn(summary?.isbn || requestIsbns[index] || '');
 
       // 書影URL取得（summary.cover）
       const rawImageUrl = summary?.cover || undefined;
       const imageUrl = rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined;
+      const coverCandidates = dedupeUrls([imageUrl]);
 
       // 出版社取得
       const publisher = summary?.publisher || undefined;
@@ -85,7 +97,9 @@ export const fetchBooksFromOpenBD = async (isbns: string[]): Promise<Book[]> => 
           author: author || '著者不明',
           isbn,
           imageUrl,
+          coverCandidates,
           publisher,
+          source: 'openbd',
         });
       }
     });

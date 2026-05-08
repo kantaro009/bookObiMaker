@@ -46,3 +46,21 @@ export const toIsbn10 = (isbn: string): string | null => {
 
   return core + checkDigit;
 };
+
+export const toIsbn13 = (isbn: string): string | null => {
+  const cleanIsbn = normalizeIsbn(isbn);
+  if (!cleanIsbn) return null;
+
+  if (isIsbn13(cleanIsbn)) return cleanIsbn;
+  if (!isIsbn10(cleanIsbn)) return null;
+
+  const core = `978${cleanIsbn.slice(0, 9)}`;
+  let sum = 0;
+  for (let i = 0; i < core.length; i += 1) {
+    const digit = parseInt(core[i], 10);
+    sum += digit * (i % 2 === 0 ? 1 : 3);
+  }
+
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return `${core}${checkDigit}`;
+};

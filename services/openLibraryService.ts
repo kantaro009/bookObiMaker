@@ -1,5 +1,5 @@
 import { Book } from '../types';
-import { getCorsFriendlyUrl } from './imageUtils';
+import { dedupeUrls, getCorsFriendlyUrl } from './imageUtils';
 import { pickPreferredIsbn } from '../utils/isbnUtils';
 import { normalizeForMatch } from '../utils/textMatchUtils';
 
@@ -14,10 +14,14 @@ interface OpenLibrarySearchResult {
     isbn?: string[];
     cover_i?: number;
     cover_edition_key?: string;
+    edition_key?: string[];
     publisher?: string[];
     first_publish_year?: number;
   }>;
 }
+
+type CoverSize = 'S' | 'M' | 'L';
+const COVER_SIZES: CoverSize[] = ['L', 'M', 'S'];
 
 /**
  * Open Library Search APIで書籍検索
@@ -30,6 +34,7 @@ export const searchBooksFromOpenLibrary = async (
   limit: number = 12
 ): Promise<Book[]> => {
   if (!query) return [];
+  if (query.trim().length < 3) return [];
 
   const url = `${OPENLIBRARY_SEARCH_ENDPOINT}?q=${encodeURIComponent(query)}&limit=${limit}`;
 
@@ -46,20 +51,14 @@ export const searchBooksFromOpenLibrary = async (
       const title = doc.title || '';
       const author = doc.author_name?.[0] || '著者不明';
       const isbn = pickPreferredIsbn(doc.isbn);
+      const olid = doc.cover_edition_key || doc.edition_key?.[0];
       const publisher = doc.publisher?.[0] || undefined;
-
-      // 書影URL生成
-      let imageUrl: string | undefined;
-      if (isbn) {
-        // ISBNから書影URLを生成（Lサイズ=高解像度）
-        // default=false を追加して、画像がない場合に404を返すようにする（wsrv.nlがよしなに処理してくれることを期待、またはonErrorで対応）
-        const rawUrl = `${OPENLIBRARY_COVERS_ENDPOINT}/isbn/${isbn}-L.jpg?default=false`;
-        imageUrl = getCorsFriendlyUrl(rawUrl);
-      } else if (doc.cover_i) {
-        // cover_iから書影URLを生成
-        const rawUrl = `${OPENLIBRARY_COVERS_ENDPOINT}/id/${doc.cover_i}-L.jpg?default=false`;
-        imageUrl = getCorsFriendlyUrl(rawUrl);
-      }
+      const coverCandidates = buildOpenLibraryCoverCandidates({
+        isbn,
+        olid,
+        coverId: doc.cover_i,
+      });
+      const imageUrl = coverCandidates[0];
 
       if (title) {
         books.push({
@@ -67,6 +66,7 @@ export const searchBooksFromOpenLibrary = async (
           author,
           isbn,
           imageUrl,
+          coverCandidates,
           publisher,
           source: 'openlibrary',
         });
@@ -127,6 +127,10 @@ export const getCoverUrlByISBN = (isbn: string, size: 'S' | 'M' | 'L' = 'L'): st
   return getCorsFriendlyUrl(`${OPENLIBRARY_COVERS_ENDPOINT}/isbn/${isbn}-${size}.jpg?default=false`);
 };
 
+export const getCoverUrlByOLID = (olid: string, size: 'S' | 'M' | 'L' = 'L'): string => {
+  return getCorsFriendlyUrl(`${OPENLIBRARY_COVERS_ENDPOINT}/olid/${olid}-${size}.jpg?default=false`);
+};
+
 /**
  * Cover IDから書影URLを生成
  * @param coverId Cover ID
@@ -135,4 +139,28 @@ export const getCoverUrlByISBN = (isbn: string, size: 'S' | 'M' | 'L' = 'L'): st
  */
 export const getCoverUrlByCoverId = (coverId: number, size: 'S' | 'M' | 'L' = 'L'): string => {
   return getCorsFriendlyUrl(`${OPENLIBRARY_COVERS_ENDPOINT}/id/${coverId}-${size}.jpg?default=false`);
+};
+
+export const buildOpenLibraryCoverCandidates = ({
+  isbn,
+  olid,
+  coverId,
+}: {
+  isbn?: string;
+  olid?: string;
+  coverId?: number;
+}): string[] => {
+  const urls: string[] = [];
+
+  if (isbn) {
+    COVER_SIZES.forEach((size) => urls.push(getCoverUrlByISBN(isbn, size)));
+  }
+  if (olid) {
+    COVER_SIZES.forEach((size) => urls.push(getCoverUrlByOLID(olid, size)));
+  }
+  if (coverId) {
+    COVER_SIZES.forEach((size) => urls.push(getCoverUrlByCoverId(coverId, size)));
+  }
+
+  return dedupeUrls(urls);
 };

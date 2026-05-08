@@ -173,24 +173,50 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
   }, [uploadUrl]);
 
   useEffect(() => {
-    const sourceUrl = uploadUrl || book.imageUrl;
-    if (!sourceUrl) {
+    const candidates = uploadUrl
+      ? [uploadUrl]
+      : Array.from(new Set([book.imageUrl, ...(book.coverCandidates || [])].filter(Boolean))) as string[];
+
+    if (candidates.length === 0) {
       setImgElement(null);
       setLoadError(true);
       return;
     }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = sourceUrl;
-    img.onload = () => {
-      setLoadError(false);
-      setImgElement(img);
+
+    let isCancelled = false;
+    const tryLoad = (index: number) => {
+      if (isCancelled) return;
+      const sourceUrl = candidates[index];
+      if (!sourceUrl) {
+        setImgElement(null);
+        setLoadError(true);
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = sourceUrl;
+      img.onload = () => {
+        if (isCancelled) return;
+        setLoadError(false);
+        setImgElement(img);
+      };
+      img.onerror = () => {
+        if (isCancelled) return;
+        if (index + 1 < candidates.length) {
+          tryLoad(index + 1);
+          return;
+        }
+        setImgElement(null);
+        setLoadError(true);
+      };
     };
-    img.onerror = () => {
-      setImgElement(null);
-      setLoadError(true);
+
+    tryLoad(0);
+    return () => {
+      isCancelled = true;
     };
-  }, [book.imageUrl, uploadUrl]);
+  }, [book.imageUrl, book.coverCandidates, uploadUrl]);
 
   const handleUploadImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

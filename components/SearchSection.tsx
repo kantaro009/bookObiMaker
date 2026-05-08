@@ -1,4 +1,4 @@
-import React, { FormEvent } from 'react';
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Search, Book as BookIcon } from 'lucide-react';
 import { Button } from './Button';
 import { Book } from '../types';
@@ -13,6 +13,42 @@ interface SearchSectionProps {
   onSearch: (query: string) => void;
   onSelectBook: (book: Book) => void;
 }
+
+const PLACEHOLDER_IMAGE = 'https://placehold.co/400x600/f2e8e5/a18072?text=No+Image';
+
+const BookCover: React.FC<{ book: Book }> = ({ book }) => {
+  const candidates = useMemo(
+    () => Array.from(new Set([book.imageUrl, ...(book.coverCandidates || [])].filter(Boolean))) as string[],
+    [book.imageUrl, book.coverCandidates]
+  );
+  const [index, setIndex] = useState(0);
+  const [isExhausted, setIsExhausted] = useState(false);
+
+  useEffect(() => {
+    setIndex(0);
+    setIsExhausted(false);
+  }, [book.title, book.isbn, candidates.join('|')]);
+
+  if (candidates.length === 0 || isExhausted) {
+    return <img src={PLACEHOLDER_IMAGE} alt={book.title} className="w-full h-full object-cover" />;
+  }
+
+  return (
+    <img
+      src={candidates[index]}
+      alt={book.title}
+      className="w-full h-full object-cover"
+      onError={() => {
+        setIndex((prev) => {
+          const next = prev + 1;
+          if (next < candidates.length) return next;
+          setIsExhausted(true);
+          return prev;
+        });
+      }}
+    />
+  );
+};
 
 export const SearchSection: React.FC<SearchSectionProps> = ({ 
   query,
@@ -83,20 +119,13 @@ export const SearchSection: React.FC<SearchSectionProps> = ({
             >
               <div className="w-full aspect-[2/3] bg-brand-50 rounded mb-3 overflow-hidden flex items-center justify-center relative">
                 {book.imageUrl ? (
-                  <img 
-                    src={book.imageUrl} 
-                    alt={book.title} 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://placehold.co/400x600/f2e8e5/a18072?text=No+Image';
-                    }}
-                  />
+                  <BookCover book={book} />
                 ) : (
                   <BookIcon size={40} className="text-brand-300" />
                 )}
                 {book.source && (
                   <div className="absolute top-1 right-1 px-1.5 py-0.5 bg-brand-900/60 text-white text-[8px] rounded uppercase backdrop-blur-sm">
-                    {book.source === 'openlibrary' ? 'International' : book.source}
+                    {book.source === 'openlibrary' ? 'International' : book.source === 'googlebooks' ? 'Google Books' : book.source}
                   </div>
                 )}
                 <div className="absolute inset-0 bg-brand-900/0 group-hover:bg-brand-900/10 transition-colors" />

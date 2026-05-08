@@ -1,7 +1,8 @@
 import { Book } from '../types';
 import { fetchBooksFromOpenBD } from './openBdService';
-import { searchBooksFromOpenLibrary, getCoverUrlByISBN, findIsbnByTitleAuthor } from './openLibraryService';
-import { getCorsFriendlyUrl } from './imageUtils';
+import { fetchBooksFromGoogleBooks } from './googleBooksService';
+import { buildOpenLibraryCoverCandidates, searchBooksFromOpenLibrary, findIsbnByTitleAuthor } from './openLibraryService';
+import { dedupeUrls, getCorsFriendlyUrl } from './imageUtils';
 import { normalizeIsbn, isIsbn10, isIsbn13, pickPreferredIsbn } from '../utils/isbnUtils';
 import { normalizeForMatch } from '../utils/textMatchUtils';
 
@@ -39,15 +40,16 @@ const DEMO_BOOKS: Book[] = [
  * NDLから書籍情報を検索
  */
 async function fetchFromNDL(query: string): Promise<Book[]> {
-  const url = `${NDL_API_ENDPOINT}?title=${encodeURIComponent(query)}&cnt=12&dplot=RSS`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`NDL API Error: ${response.status}`);
-  
-  const xmlText = await response.text();
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-  
-  const items = xmlDoc.querySelectorAll('item');
+  const fetchNdlByField = async (field: 'title' | 'creator') => {
+    const url = `${NDL_API_ENDPOINT}?${field}=${encodeURIComponent(query)}&cnt=12&dplot=RSS`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`NDL API Error: ${response.status}`);
+    const xmlText = await response.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+    return xmlDoc.querySelectorAll('item');
+  };
+
   const ndlBooks: Book[] = [];
 
   const extractIsbnFromUrl = (url: string): string | null => {
@@ -65,7 +67,8 @@ async function fetchFromNDL(query: string): Promise<Book[]> {
     return isIsbn10(value) || isIsbn13(value);
   };
 
-  items.forEach((item) => {
+  const pushBooksFromItems = (items: NodeListOf<Element>) => {
+    items.forEach((item) => {
     const title = item.querySelector('title')?.textContent || '';
     const author = item.querySelector('author')?.textContent || '';
     const categories = Array.from(item.getElementsByTagName('category'))
@@ -119,21 +122,49 @@ async function fetchFromNDL(query: string): Promise<Book[]> {
     if (title) {
       const imageIdentifier = jpCode || isbn;
       const rawImageUrl = imageIdentifier ? `https://ndlsearch.ndl.go.jp/thumbnail/${imageIdentifier}.jpg` : undefined;
+      const coverCandidates = dedupeUrls([rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined]);
       const finalIsbn = isbn || jpCode;
       
       ndlBooks.push({
         title,
         author,
         isbn: finalIsbn || undefined,
-        imageUrl: rawImageUrl ? getCorsFriendlyUrl(rawImageUrl) : undefined,
+        imageUrl: coverCandidates[0],
+        coverCandidates,
         source: 'ndl',
       });
     }
-  });
+    });
+  };
+
+  const [titleResult, creatorResult] = await Promise.allSettled([
+    fetchNdlByField('title'),
+    fetchNdlByField('creator'),
+  ]);
+
+  if (titleResult.status === 'fulfilled') {
+    pushBooksFromItems(titleResult.value);
+  }
+  if (creatorResult.status === 'fulfilled') {
+    pushBooksFromItems(creatorResult.value);
+  }
+
+  if (titleResult.status === 'rejected' && creatorResult.status === 'rejected') {
+    throw titleResult.reason;
+  }
+
+  const uniqueNdlBooks = Array.from(
+    new Map(
+      ndlBooks.map((book) => {
+        const key = `${book.isbn || ''}|${normalizeForMatch(book.title)}|${normalizeForMatch(book.author)}`;
+        return [key, book] as const;
+      })
+    ).values()
+  );
 
   // Open LibraryでISBN補完（タイトル+著者一致）
   const normalizedBooks = await Promise.all(
-    ndlBooks.map(async (book) => {
+    uniqueNdlBooks.map(async (book) => {
       if (book.isbn) return book;
       const complemented = await findIsbnByTitleAuthor(book.title, book.author);
       if (!complemented) return book;
@@ -154,17 +185,23 @@ async function fetchFromNDL(query: string): Promise<Book[]> {
       return normalizedBooks.map(ndlBook => {
         const isbnValue = ndlBook.isbn || '';
         const bdBook = isbnValue ? openBdMap.get(isbnValue) : undefined;
-        const fallbackOlCover = (!bdBook?.imageUrl && !ndlBook.imageUrl && isbnValue && isIsbnForOpenLibrary(isbnValue))
-          ? getCoverUrlByISBN(isbnValue)
-          : undefined;
-        const imageUrl = bdBook?.imageUrl || ndlBook.imageUrl || fallbackOlCover;
+        const fallbackOlCovers = isbnValue && isIsbnForOpenLibrary(isbnValue)
+          ? buildOpenLibraryCoverCandidates({ isbn: isbnValue })
+          : [];
+        const coverCandidates = dedupeUrls([
+          ...(bdBook?.coverCandidates || []),
+          ...(ndlBook.coverCandidates || []),
+          ...fallbackOlCovers,
+        ]);
+        const imageUrl = coverCandidates[0];
 
-        if (bdBook || fallbackOlCover) {
+        if (bdBook || fallbackOlCovers.length > 0) {
           return {
             ...ndlBook,
             imageUrl,
+            coverCandidates,
             publisher: bdBook?.publisher || ndlBook.publisher,
-            source: bdBook?.imageUrl ? 'openbd' : fallbackOlCover ? 'openlibrary' : 'ndl',
+            source: bdBook?.imageUrl ? 'openbd' : ndlBook.imageUrl ? 'ndl' : fallbackOlCovers.length > 0 ? 'openlibrary' : 'ndl',
           };
         }
         return ndlBook;
@@ -197,7 +234,9 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
     if (key !== '|') ndlMap.set(key, book);
   });
 
-  const seenIsbns = new Set<string>(ndlBooks.map((b) => b.isbn).filter(Boolean));
+  const seenIsbns = new Set<string>(
+    ndlBooks.map((b) => b.isbn).filter((isbn): isbn is string => Boolean(isbn))
+  );
 
   // Open Library の結果を統合（タイトル+著者一致ならNDL優先）
   olBooks.forEach((book) => {
@@ -207,8 +246,13 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
       if (!ndlMatch.isbn && book.isbn) {
         ndlMatch.isbn = book.isbn;
       }
-      if (!ndlMatch.imageUrl && book.imageUrl) {
-        ndlMatch.imageUrl = book.imageUrl;
+      ndlMatch.coverCandidates = dedupeUrls([
+        ...(ndlMatch.coverCandidates || []),
+        ...(book.coverCandidates || []),
+        book.imageUrl,
+      ]);
+      if (!ndlMatch.imageUrl && ndlMatch.coverCandidates[0]) {
+        ndlMatch.imageUrl = ndlMatch.coverCandidates[0];
         ndlMatch.source = 'openlibrary';
       }
       return;
@@ -216,7 +260,12 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
 
     if (book.isbn && seenIsbns.has(book.isbn)) return;
     if (book.isbn) seenIsbns.add(book.isbn);
-    books.push(book);
+    const coverCandidates = dedupeUrls([book.imageUrl, ...(book.coverCandidates || [])]);
+    books.push({
+      ...book,
+      imageUrl: coverCandidates[0],
+      coverCandidates,
+    });
   });
 
   // 両方のAPIがエラーまたは結果ゼロの場合、デモデータをフィルタリングして返す
@@ -229,5 +278,48 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
     if (demoMatches.length > 0) return demoMatches;
   }
 
-  return books;
+  const mergedBooks = books.map((book) => {
+    const coverCandidates = dedupeUrls([book.imageUrl, ...(book.coverCandidates || [])]);
+    return {
+      ...book,
+      imageUrl: coverCandidates[0],
+      coverCandidates,
+    };
+  });
+
+  const isbns = mergedBooks
+    .map((book) => normalizeIsbn(book.isbn))
+    .filter((isbn): isbn is string => Boolean(isbn));
+  if (isbns.length === 0) return mergedBooks;
+
+  try {
+    const googleBooks = await fetchBooksFromGoogleBooks(isbns);
+    const googleBookMap = new Map(
+      googleBooks
+        .map((book) => {
+          const isbn = normalizeIsbn(book.isbn);
+          return isbn ? [isbn, book] as const : null;
+        })
+        .filter((entry): entry is readonly [string, Book] => Boolean(entry))
+    );
+
+    return mergedBooks.map((book) => {
+      const isbn = normalizeIsbn(book.isbn);
+      const googleBook = isbn ? googleBookMap.get(isbn) : undefined;
+      const coverCandidates = dedupeUrls([
+        ...(book.coverCandidates || []),
+        ...(googleBook?.coverCandidates || []),
+      ]);
+
+      return {
+        ...book,
+        imageUrl: coverCandidates[0],
+        coverCandidates,
+        publisher: book.publisher || googleBook?.publisher,
+      };
+    });
+  } catch (error) {
+    console.warn('Google Books complement failed:', error);
+    return mergedBooks;
+  }
 };

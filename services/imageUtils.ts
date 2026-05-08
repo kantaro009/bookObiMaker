@@ -8,3 +8,7 @@ export const getCorsFriendlyUrl = (url: string) => {
   // output=jpg ensures we get a consistent format and handles some transparency issues if any
   return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=jpg`;
 };
+
+export const dedupeUrls = (urls: Array<string | undefined | null>): string[] => {
+  return Array.from(new Set(urls.filter((url): url is string => Boolean(url && url.trim()))));
+};

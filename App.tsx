@@ -69,7 +69,7 @@ function App() {
       <footer className="py-6 text-center text-brand-400 text-xs border-t border-brand-100 mt-auto">
         <p>© 2024 bookObiMaker</p>
         <p className="mt-1">
-          国立国会図書館サーチAPI、openBD、Open Library APIを使用しています。
+          国立国会図書館サーチAPI、openBD、Open Library API、Google Books APIを使用しています。
           <br/>
           生成された画像の著作権は各権利者に帰属します。私的使用の範囲内でご利用ください。
         </p>
