@@ -288,6 +288,10 @@ export const searchBooks = async (query: string): Promise<Book[]> => {
   });
 
   const isbns = mergedBooks
+    .filter((book) => {
+      const candidates = dedupeUrls([book.imageUrl, ...(book.coverCandidates || [])]);
+      return candidates.length === 0;
+    })
     .map((book) => normalizeIsbn(book.isbn))
     .filter((isbn): isbn is string => Boolean(isbn));
   if (isbns.length === 0) return mergedBooks;

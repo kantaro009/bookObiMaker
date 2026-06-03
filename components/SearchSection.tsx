@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Search, Book as BookIcon } from 'lucide-react';
 import { Button } from './Button';
 import { Book } from '../types';
+import { expandImageCandidates } from '../services/imageUtils';
 
 interface SearchSectionProps {
   query: string;
@@ -18,7 +19,7 @@ const PLACEHOLDER_IMAGE = 'https://placehold.co/400x600/f2e8e5/a18072?text=No+Im
 
 const BookCover: React.FC<{ book: Book }> = ({ book }) => {
   const candidates = useMemo(
-    () => Array.from(new Set([book.imageUrl, ...(book.coverCandidates || [])].filter(Boolean))) as string[],
+    () => expandImageCandidates([book.imageUrl, ...(book.coverCandidates || [])]),
     [book.imageUrl, book.coverCandidates]
   );
   const [index, setIndex] = useState(0);

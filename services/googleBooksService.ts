@@ -4,6 +4,10 @@ import { isIsbn10, isIsbn13, normalizeIsbn, toIsbn13 } from '../utils/isbnUtils'
 
 const GOOGLE_BOOKS_API_ENDPOINT = 'https://www.googleapis.com/books/v1/volumes';
 const GOOGLE_IMAGE_KEYS = ['extraLarge', 'large', 'medium', 'small', 'thumbnail', 'smallThumbnail'] as const;
+const GOOGLE_MAX_RETRIES = 2;
+const GOOGLE_MAX_CONCURRENCY = 2;
+
+const googleBookCache = new Map<string, Book | null>();
 
 interface GoogleBooksVolume {
   volumeInfo?: {
@@ -21,6 +25,29 @@ interface GoogleBooksVolume {
 interface GoogleBooksResponse {
   items?: GoogleBooksVolume[];
 }
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchGoogleBooksWithRetry = async (url: string): Promise<Response> => {
+  for (let attempt = 0; attempt <= GOOGLE_MAX_RETRIES; attempt += 1) {
+    const response = await fetch(url);
+    if (response.ok) return response;
+
+    const shouldRetry = (response.status === 429 || response.status >= 500) && attempt < GOOGLE_MAX_RETRIES;
+    if (!shouldRetry) {
+      throw new Error(`Google Books API Error: ${response.status}`);
+    }
+
+    const retryAfterHeader = response.headers.get('Retry-After');
+    const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+    const backoffMs = Number.isFinite(retryAfterSeconds)
+      ? Math.max(0, retryAfterSeconds * 1000)
+      : 400 * Math.pow(2, attempt);
+    await wait(backoffMs);
+  }
+
+  throw new Error('Google Books API retry exhausted');
+};
 
 const normalizeGoogleImageUrl = (url: string): string => {
   return url.replace(/^http:\/\//i, 'https://');
@@ -61,20 +88,26 @@ const fetchBookFromGoogleBooks = async (isbn: string): Promise<Book | null> => {
   const normalizedIsbn = normalizeIsbn(isbn);
   if (!normalizedIsbn) return null;
 
+  const cached = googleBookCache.get(normalizedIsbn);
+  if (cached !== undefined) return cached;
+
   try {
-    const response = await fetch(`${GOOGLE_BOOKS_API_ENDPOINT}?q=isbn:${normalizedIsbn}&maxResults=5`);
-    if (!response.ok) {
-      throw new Error(`Google Books API Error: ${response.status}`);
-    }
+    const response = await fetchGoogleBooksWithRetry(`${GOOGLE_BOOKS_API_ENDPOINT}?q=isbn:${normalizedIsbn}&maxResults=5`);
 
     const data: GoogleBooksResponse = await response.json();
     const volume = findBestMatchingVolume(data.items || [], normalizedIsbn);
-    if (!volume?.volumeInfo?.title) return null;
+    if (!volume?.volumeInfo?.title) {
+      googleBookCache.set(normalizedIsbn, null);
+      return null;
+    }
 
     const coverCandidates = buildGoogleCoverCandidates(volume);
-    if (coverCandidates.length === 0) return null;
+    if (coverCandidates.length === 0) {
+      googleBookCache.set(normalizedIsbn, null);
+      return null;
+    }
 
-    return {
+    const result: Book = {
       title: volume.volumeInfo.title,
       author: volume.volumeInfo.authors?.[0] || '著者不明',
       isbn: extractGoogleBookIsbn(volume) || normalizedIsbn,
@@ -83,8 +116,12 @@ const fetchBookFromGoogleBooks = async (isbn: string): Promise<Book | null> => {
       publisher: volume.volumeInfo.publisher,
       source: 'googlebooks',
     };
+
+    googleBookCache.set(normalizedIsbn, result);
+    return result;
   } catch (error) {
     console.warn('Failed to fetch from Google Books:', error);
+    googleBookCache.set(normalizedIsbn, null);
     return null;
   }
 };
@@ -98,10 +135,18 @@ export const fetchBooksFromGoogleBooks = async (isbns: string[]): Promise<Book[]
   ));
   if (requestIsbns.length === 0) return [];
 
-  const results = await Promise.allSettled(requestIsbns.map((isbn) => fetchBookFromGoogleBooks(isbn)));
+  const results: Book[] = [];
 
-  return results
-    .filter((result): result is PromiseFulfilledResult<Book | null> => result.status === 'fulfilled')
-    .map((result) => result.value)
-    .filter((book): book is Book => Boolean(book));
+  for (let i = 0; i < requestIsbns.length; i += GOOGLE_MAX_CONCURRENCY) {
+    const chunk = requestIsbns.slice(i, i + GOOGLE_MAX_CONCURRENCY);
+    const chunkResults = await Promise.allSettled(chunk.map((isbn) => fetchBookFromGoogleBooks(isbn)));
+
+    chunkResults
+      .filter((result): result is PromiseFulfilledResult<Book | null> => result.status === 'fulfilled')
+      .map((result) => result.value)
+      .filter((book): book is Book => Boolean(book))
+      .forEach((book) => results.push(book));
+  }
+
+  return results;
 };

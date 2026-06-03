@@ -3,6 +3,7 @@ import { ArrowLeft, Download, Type, Palette, Layout, Settings2, Sparkles, BoxSel
 import { Button } from './Button';
 import { Book, ObiStyle, ObiContent, TextConfig } from '../types';
 import { toIsbn10 } from '../utils/isbnUtils';
+import { expandImageCandidates } from '../services/imageUtils';
 
 interface EditorSectionProps {
   book: Book;
@@ -175,7 +176,7 @@ export const EditorSection: React.FC<EditorSectionProps> = ({ book, onBack }) =>
   useEffect(() => {
     const candidates = uploadUrl
       ? [uploadUrl]
-      : Array.from(new Set([book.imageUrl, ...(book.coverCandidates || [])].filter(Boolean))) as string[];
+      : expandImageCandidates([book.imageUrl, ...(book.coverCandidates || [])]);
 
     if (candidates.length === 0) {
       setImgElement(null);
